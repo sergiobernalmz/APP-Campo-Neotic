@@ -7,7 +7,7 @@
 class ApiConfig {
   /// URL del Web App desplegado en Google Apps Script.
   static const String baseUrl =
-      'https://script.google.com/macros/s/AKfycbwXites3rYC0kAk3IFtwaO9no63HpSr3cAmMNkPBedOkU4F4xOtH3FkmBHngOhR4lAP/exec';
+      'https://script.google.com/macros/s/AKfycbyUljdQ5ld-YwohjtOpquIGZf-JOJa67MNCYwCqihTwoBJes1CqCZxHNevmMPo6dvuw/exec';
 
   /// Token API compartido. Validado por `doGet`/`doPost` en `backend/Code.gs`.
   static const String apiToken =

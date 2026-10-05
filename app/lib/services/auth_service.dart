@@ -63,11 +63,13 @@ class AuthService {
       response = await client.get(uri).timeout(ApiConfig.timeout);
     } on TimeoutException {
       throw const AuthException(
-          'network_error', 'Tiempo de espera agotado');
-    } on SocketException {
-      throw const AuthException('network_error', 'Sin conexión');
+          'network_timeout', 'Tiempo de espera agotado');
+    } on SocketException catch (e) {
+      throw AuthException(
+          'network_unreachable',
+          'Sin conexión al servidor: ${e.message}');
     } catch (e) {
-      throw AuthException('network_error', 'Error de red: $e');
+      throw AuthException('network_other', 'Error de red: $e');
     }
 
     final Map<String, dynamic> body;

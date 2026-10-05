@@ -36,7 +36,7 @@ class UpdateService {
 
   /// Versión actual instalada. Debe coincidir con `pubspec.yaml:version`.
   /// La actualiza automáticamente GitHub Actions al crear un release con tag.
-  static const String currentVersion = '1.0.3';
+  static const String currentVersion = '1.0.8';
 
   final http.Client client;
 

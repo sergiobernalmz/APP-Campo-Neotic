@@ -71,8 +71,12 @@ class _LoginScreenState extends State<LoginScreen> {
         return 'Tu cuenta está inactiva. Contacta al administrador.';
       case 'pin_incorrect':
         return 'PIN incorrecto. Inténtalo de nuevo.';
-      case 'network_error':
-        return 'Sin conexión. Verifica tu red e inténtalo de nuevo.';
+      case 'network_timeout':
+        return 'El servidor tardó demasiado en responder. Reintenta.';
+      case 'network_unreachable':
+        return 'Sin conexión con el servidor. Verifica que tienes internet.';
+      case 'network_other':
+        return 'Error de red inesperado. Reintenta en unos segundos.';
       case 'server_error':
         return 'Error del servidor. Inténtalo más tarde.';
       default:

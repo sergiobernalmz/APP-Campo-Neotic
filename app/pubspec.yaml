@@ -1,7 +1,7 @@
 name: voz_campo
 description: "App móvil de toma de datos por voz con normalización inteligente para entornos agrícolas."
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.8+1
 
 environment:
   sdk: ^3.9.2
