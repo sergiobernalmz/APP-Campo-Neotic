@@ -27,7 +27,7 @@ class VersionInfo {
 ///   3. downloadAndInstall() descarga el asset, lo guarda en cache y lanza el instalador
 class UpdateService {
   /// Owner del repo en GitHub.
-  static const String _repoOwner = 'ElCoronaoV2';
+  static const String _repoOwner = 'sergiobernalmz';
   static const String _repoName = 'APP-Campo-Neotic';
 
   /// URL del API de releases (público, sin token).
@@ -36,7 +36,7 @@ class UpdateService {
 
   /// Versión actual instalada. Debe coincidir con `pubspec.yaml:version`.
   /// La actualiza automáticamente GitHub Actions al crear un release con tag.
-  static const String currentVersion = '1.0.8';
+  static const String currentVersion = '1.0.9';
 
   final http.Client client;
 

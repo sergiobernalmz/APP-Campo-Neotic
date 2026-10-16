@@ -12,10 +12,20 @@
  *   4. Deploy: clasp push && clasp deploy
  *
  * ENDPOINTS:
- *   POST /exec       -> crear registro (envía la app móvil)
- *   GET  /exec?op=preguntas    -> lista de preguntas del cuestionario
- *   GET  /exec?op=socios&numSocio=NNNN  -> validación de socio
- *   GET  /exec?op=fincas&numSocio=NNNN  -> fincas del socio (cache offline)
+ *   GET  /exec?op=preguntas                 -> lista de preguntas del cuestionario
+ *   GET  /exec?op=socios&numSocio=NNNN      -> validación de socio (sin pin)
+ *   GET  /exec?op=socios&numSocio=NNNN&pin= -> validación de socio (con pin)
+ *   GET  /exec?op=fincas[&numSocio=NNNN]    -> fincas (TODOS o de un socio)
+ *   GET  /exec?op=version                   -> version actual + apk_url
+ *   GET  /exec?op=crear_socio&...           -> crear/actualizar socio (v1.0.9: GET)
+ *   GET  /exec?op=crear_registro&...        -> crear un registro (v1.0.9: GET)
+ *
+ *   POST /exec                              -> mismo, con body JSON. Apps Script
+ *                                              Web Apps con "Anyone" tienen
+ *                                              problemas con POST (302->405), por
+ *                                              lo que la app usa GET siempre.
+ *                                              doPost se conserva por si se migra
+ *                                              a backend real (Cloud Functions).
  */
 
 // ============================================================
@@ -27,17 +37,52 @@ const API_TOKEN = '458bc7cef5e97c6b5681c7ede1c0a33131ba3ed15b98354837952babaff12
 
 // ============================================================
 
+/**
+ * Normaliza un body (objeto JS) construido desde query params (GET) o desde
+ * postData.contents (POST). Hace JSON.parse defensivo del body.
+ */
+function getBody(e) {
+  if (e.postData && e.postData.contents) {
+    try {
+      return JSON.parse(e.postData.contents);
+    } catch (err) {
+      // body no es JSON valido, fallback a query params
+    }
+  }
+  // query params -> body (todo string, sin tipos)
+  const body = {};
+  if (e.parameter) {
+    Object.keys(e.parameter).forEach((k) => {
+      if (k !== 'op' && k !== 'token') body[k] = e.parameter[k];
+    });
+  }
+  // campos anidados comunes: respuestas, metadatosVoz (los enviamos como
+  // respuestas.pueblo, respuestas.hectareas, etc. en GET)
+  const flat = {};
+  Object.keys(body).forEach((k) => {
+    if (k.startsWith('respuestas.')) {
+      flat.respuestas = flat.respuestas || {};
+      flat.respuestas[k.substring('respuestas.'.length)] = body[k];
+      delete body[k];
+    } else if (k.startsWith('metadatosVoz.')) {
+      flat.metadatosVoz = flat.metadatosVoz || {};
+      flat.metadatosVoz[k.substring('metadatosVoz.'.length)] = body[k];
+      delete body[k];
+    }
+  });
+  Object.assign(body, flat);
+  return body;
+}
+
 function doPost(e) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
 
   try {
-    const body = JSON.parse(e.postData.contents);
-
+    const body = getBody(e);
     if (body.token !== API_TOKEN) {
       return jsonResponse({ error: 'unauthorized' }, 401);
     }
-
     const op = body.op || 'crear_registro';
     switch (op) {
       case 'crear_registro':
@@ -74,6 +119,17 @@ function doGet(e) {
         return getVersion();
       case 'debug_socios':
         return debugSocios();
+      case 'crear_socio': {
+        // Refactor v1.0.9: GET para escrituras (workaround Apps Script POST bug)
+        const body = getBody(e);
+        body.op = 'crear_socio';
+        return crearSocio(body);
+      }
+      case 'crear_registro': {
+        const body = getBody(e);
+        body.op = 'crear_registro';
+        return crearRegistro(body);
+      }
       default:
         return jsonResponse({ error: 'unknown_op', op: op }, 400);
     }
@@ -250,32 +306,27 @@ function crearSocio(body) {
 }
 
 function getVersion() {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
-  let sheet = ss.getSheetByName('Config');
-  if (!sheet) {
-    // Auto-crear pestaña Config con valores por defecto
-    sheet = ss.insertSheet('Config');
-    sheet.appendRow(['version_actual', 'apk_url']);
-    sheet.appendRow(['1.0.0', '']);
-    return jsonResponse({ version: '1.0.0', apk_url: '' });
-  }
-  const data = sheet.getDataRange().getValues();
-  // Busca fila con clave 'version_actual' o usa fila 2 directamente
-  let version = '';
-  let apkUrl = '';
-  for (let i = 1; i < data.length; i++) {
-    const key = String(data[i][0] || '').toLowerCase().trim();
-    if (key === 'version_actual' || key === '') {
-      // fila de valores (no cabecera)
-      if (i === 1) { version = String(data[i][1] || ''); apkUrl = String(data[i][2] || ''); }
+  // v1.0.9: NO auto-crear pestaña Config (eso requiere permisos de
+  // escritura adicionales y rompe con "Anyone" access). Si no existe
+  // Config, devolvemos valores por defecto.
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = ss.getSheetByName('Config');
+    if (!sheet) {
+      return jsonResponse({ version: '1.0.9', apk_url: 'https://github.com/sergiobernalmz/APP-Campo-Neotic/releases/latest' });
     }
+    const data = sheet.getDataRange().getValues();
+    if (data.length < 2) {
+      return jsonResponse({ version: '1.0.9', apk_url: 'https://github.com/sergiobernalmz/APP-Campo-Neotic/releases/latest' });
+    }
+    // Formato esperado: fila 1 = cabeceras, fila 2 = [version, apk_url]
+    const version = String(data[1][1] || data[1][0] || '1.0.9');
+    const apkUrl  = String(data[1][2] || data[1][1] || 'https://github.com/sergiobernalmz/APP-Campo-Neotic/releases/latest');
+    return jsonResponse({ version: version, apk_url: apkUrl });
+  } catch (err) {
+    // Fallback silencioso: devolver version por defecto
+    return jsonResponse({ version: '1.0.9', apk_url: 'https://github.com/sergiobernalmz/APP-Campo-Neotic/releases/latest' });
   }
-  // Formato alternativo: fila 2 = [version_actual, valor, apk_url, valor]
-  if (!version && data.length >= 2) {
-    version = String(data[1][1] || data[1][0] || '1.0.0');
-    apkUrl  = String(data[1][2] || data[1][1] || '');
-  }
-  return jsonResponse({ version: version || '1.0.0', apk_url: apkUrl });
 }
 
 function debugSocios() {

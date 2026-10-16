@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_error.dart';
@@ -30,6 +31,8 @@ class SpeechService {
 
   /// Inicializa el motor pidiendo permiso de micrófono primero.
   /// Devuelve true si está listo para grabar.
+  /// No lanza excepciones: si el motor nativo falla (emulador, sin paquete
+  /// de idioma, etc.) devuelve false y deja `status=unavailable`.
   Future<bool> init() async {
     // 1. Pedir permiso de micrófono
     final permStatus = await Permission.microphone.request();
@@ -40,13 +43,32 @@ class SpeechService {
     }
 
     // 2. Inicializar speech_to_text
-    final available = await _stt.initialize(
-      onError: _onError,
-      onStatus: _onStatus,
-      debugLogging: kDebugMode,
-    );
+    bool available;
+    try {
+      available = await _stt.initialize(
+        onError: _onError,
+        onStatus: _onStatus,
+        debugLogging: kDebugMode,
+      );
+    } on PlatformException catch (e) {
+      // Caso típico: emulador sin motor STT, o dispositivo sin paquete
+      // de idioma instalado. Antes esto crasheaba la app entera.
+      available = false;
+      lastError = 'Reconocimiento de voz no disponible (${e.code})';
+      if (kDebugMode) {
+        debugPrint('SpeechService.init: PlatformException ${e.code}: ${e.message}');
+      }
+    } catch (e, st) {
+      available = false;
+      lastError = 'Error inesperado al inicializar voz: $e';
+      if (kDebugMode) {
+        debugPrint('SpeechService.init: $e\n$st');
+      }
+    }
     status = available ? SpeechStatus.ready : SpeechStatus.unavailable;
-    if (!available) lastError = 'Reconocimiento de voz no disponible en este dispositivo';
+    if (!available && (lastError == null || lastError!.isEmpty)) {
+      lastError = 'Reconocimiento de voz no disponible en este dispositivo';
+    }
     return available;
   }
 
